@@ -11,6 +11,10 @@ if(POLICY CMP0074)
 	cmake_policy(SET CMP0074 NEW)
 endif()
 
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
+
+set(CMAKE_C_FLAGS_Release "${CMAKE_C_FLAGS_Release} -O3")
+
 # Name of the project.
 #
 # CMake files in this project can refer to the root source directory
