@@ -107,6 +107,25 @@ MDEFVAR_OPTDENSE_float(fRandomSmoothBonus, "Random Smooth Bonus", "Score factor 
 }
 
 
+void DepthData::ApplyIgnoreMask(const BitMatrix& mask)
+{
+	ASSERT(IsValid() && !IsEmpty() && mask.size() == depthMap.size());
+	for (int r=0; r<depthMap.rows; ++r) {
+		for (int c=0; c<depthMap.cols; ++c) {
+			if (mask.isSet(r,c))
+				continue;
+			// discard depth-map section ignored by mask
+			depthMap(r,c) = 0;
+			if (!normalMap.empty())
+				normalMap(r,c) = Normal::ZERO;
+			if (!confMap.empty())
+			 	confMap(r,c) = 0;
+		}
+	}
+} // ApplyIgnoreMask
+
+
+
 
 // S T R U C T S ///////////////////////////////////////////////////
 
@@ -247,7 +266,69 @@ unsigned DepthData::DecRef()
 		Release();
 	return references;
 }
-/*----------------------------------------------------------------*/
+// /*----------------------------------------------------------------*/
+
+float resizeImage(Image8U& image, unsigned nMaxResolution)
+{
+	int width, height;
+	if (!image.empty()) {
+		width = image.width();
+		height = image.height();
+	}
+	if (nMaxResolution == 0 || MAXF(width,height) <= nMaxResolution)
+		return 1.f;
+	float scale;
+	if (width > height) {
+		scale = (float)nMaxResolution/width;
+		height = height*nMaxResolution/width;
+		width = nMaxResolution;
+	} else {
+		scale = (float)nMaxResolution/height;
+		width = width*nMaxResolution/height;
+		height = nMaxResolution;
+	}
+	if (!image.empty())
+		cv::resize(image, image, cv::Size((int)width, (int)height), 0, 0, cv::INTER_AREA);
+	return scale;
+} // ResizeImage
+
+bool DepthEstimator::ImportIgnoreMask(const Image& image0, const Image8U::Size& size, BitMatrix& bmask, uint16_t nIgnoreMaskLabel)
+{
+	ASSERT(image0.IsValid() && !image0.image.empty());
+	std::cout << image0.name << ".\n";
+	std::string ppath_image = Util::getFilePath(image0.name);
+	std::string stem_image = Util::getFileName(image0.name);
+
+	std::string path_png = ppath_image + "../masks/" + stem_image + ".png";
+	std::cout << "Mask path: " << path_png << "\n";
+
+	
+	// load mask  
+	cv::Mat img, mask, scale_al;
+    img = cv::imread(path_png, cv::IMREAD_UNCHANGED);
+    cv::extractChannel(img, mask, img.channels()-1);
+	cv::resize(mask, mask, size, 0, 0, cv::INTER_NEAREST);
+	//cv::imwrite("./images_test/"+stem_image +".jpg", mask);
+
+
+	bmask.create(size);
+	bmask.memset(0xFF);
+	//std::cout << "bmask(0,0): " << bmask(0,0) << "\n";
+
+	int num = 0;
+	for (int r=0; r<size.height; ++r) {
+		for (int c=0; c<size.width; ++c) {
+			if (mask.at<uint8_t>(r,c) < nIgnoreMaskLabel)
+				bmask.unset(r,c);
+			// if (bmask(r,c) < nIgnoreMaskLabel && num<10){
+			// 	//std::cout << mask.at<uint8_t>(r,c) << ".\n";
+			// 	std::cout << "(" << r << "," << c << "): " << bmask(r,c) << "\n";
+			// 	num++;
+			// }
+		}
+	}
+	return true;
+} // ImportIgnoreMask
 
 
 

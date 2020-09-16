@@ -493,9 +493,14 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 {
 	TD_TIMER_STARTD();
+	std::cout << "EstimateDepthMap Index: "  << idxImage << ".\n";
 
 	// initialize depth and normal maps
 	DepthData& depthData(arrDepthData[idxImage]);
+	std::string ppath_image = Util::getFilePath((*depthData.GetView().pImageData).name);
+	std::string stem_image = Util::getFileName((*depthData.GetView().pImageData).name);
+	std::cout << ppath_image << stem_image << "\n";
+
 	ASSERT(depthData.images.GetSize() > 1 && !depthData.points.IsEmpty());
 	const DepthData::ViewData& image(depthData.images.First());
 	ASSERT(!image.image.empty() && !depthData.images[1].image.empty());
@@ -544,10 +549,27 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	Image64F imageSum0;
 	cv::integral(image.image, imageSum0, CV_64F);
 	#endif
-	if (prevDepthMapSize != size) {
+	prevDepthMapSize = size;
+	if (prevDepthMapSize == size) {
 		prevDepthMapSize = size;
 		BitMatrix mask;
+
+		// Add mask;
+		// DepthEstimator::ImportIgnoreMask(*depthData.GetView().pImageData, depthData.depthMap.size(), mask, 120);
+		// depthData.ApplyIgnoreMask(mask);
+
 		DepthEstimator::MapMatrix2ZigzagIdx(size, coords, mask, MAXF(64,(int)nMaxThreads*8));
+		#if 0
+		// show pixels to be processed
+			Image8U cmask(size);
+			cmask.memset(0);
+			for (const DepthEstimator::MapRef& x: coords)
+				cmask(x.y, x.x) = 255;
+			cmask.Save("./images_test_bitmat/"+stem_image +".jpg");
+		#endif
+		if (mask.empty())
+			prevDepthMapSize = size;
+
 	}
 
 	// init threads
@@ -1673,6 +1695,7 @@ void Scene::DenseReconstructionEstimate(void* pData)
 
 		case EVT_ESTIMATEDEPTHMAP: {
 			const EVTEstimateDepthMap& evtImage = *((EVTEstimateDepthMap*)(Event*)evt);
+			std::cout << "\nIndex image is " << evtImage.idxImage << ".\n";
 			// request next image initialization to be performed while computing this depth-map
 			data.events.AddEvent(new EVTProcessImage((uint32_t)Thread::safeInc(data.idxImage)));
 			// extract depth map

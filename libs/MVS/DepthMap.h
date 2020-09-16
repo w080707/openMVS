@@ -177,6 +177,10 @@ struct MVS_API DepthData {
 	unsigned references; // how many times this depth-map is referenced (on 0 can be safely unloaded)
 	CriticalSection cs; // used to count references
 
+
+
+	void ApplyIgnoreMask(const BitMatrix& mask);
+
 	inline DepthData() : references(0) {}
 
 	inline void ReleaseImages() {
@@ -424,6 +428,7 @@ struct MVS_API DepthEstimator {
 	}
 
 	static void MapMatrix2ZigzagIdx(const Image8U::Size& size, DepthEstimator::MapRefArr& coords, const BitMatrix& mask, int rawStride=16);
+	static bool ImportIgnoreMask(const Image& image0, const Image8U::Size& size, BitMatrix& bmask, uint16_t nIgnoreMaskLabel);
 
 	const float smoothBonusDepth, smoothBonusNormal;
 	const float smoothSigmaDepth, smoothSigmaNormal;
