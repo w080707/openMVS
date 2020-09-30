@@ -555,8 +555,8 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		BitMatrix mask;
 
 		// Add mask;
-		// DepthEstimator::ImportIgnoreMask(*depthData.GetView().pImageData, depthData.depthMap.size(), mask, 120);
-		// depthData.ApplyIgnoreMask(mask);
+		DepthEstimator::ImportIgnoreMask(*depthData.GetView().pImageData, depthData.depthMap.size(), mask, 120);
+		depthData.ApplyIgnoreMask(mask);
 
 		DepthEstimator::MapMatrix2ZigzagIdx(size, coords, mask, MAXF(64,(int)nMaxThreads*8));
 		#if 0
