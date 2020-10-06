@@ -83,7 +83,10 @@ public:
 
 	// Dense reconstruction
 	bool DenseReconstruction(int nFusionMode=0);
+
 	bool ComputeDepthMaps(DenseDepthMapData& data);
+	bool ComputeDepthMapsCoarseToFine(DenseDepthMapData& data);
+
 	void DenseReconstructionEstimate(void*);
 	void DenseReconstructionFilter(void*);
 	void PointCloudFilter(int thRemove=-1);
