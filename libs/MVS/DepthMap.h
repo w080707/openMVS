@@ -126,6 +126,9 @@ extern float fRandomAngle2Range;
 extern float fRandomSmoothDepth;
 extern float fRandomSmoothNormal;
 extern float fRandomSmoothBonus;
+
+extern unsigned nCoarseToFineStep;
+extern bool bCoarseToFine;
 } // namespace OPTDENSE
 /*----------------------------------------------------------------*/
 

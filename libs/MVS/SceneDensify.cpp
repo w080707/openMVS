@@ -727,6 +727,7 @@ bool DepthMapsData::EstimateDepthMapCoarseToFine(IIndex idxImage)
 			// compute rough estimates using the sparse point-cloud
 			InitDepthMap(depthData);
 		}
+		OPTDENSE::nCoarseToFineStep++;
 	}
 	else{
 		//TODO: upsample images(depthmap, confmap, normmap)
@@ -735,6 +736,7 @@ bool DepthMapsData::EstimateDepthMapCoarseToFine(IIndex idxImage)
 		std::cout << "After sample " << depthData.depthMap.size() << ".\n\n";
 		cv::resize(depthData.normalMap, depthData.normalMap, size, 0, 0, cv::INTER_AREA);
 		cv::resize(depthData.confMap, depthData.confMap, size, 0, 0, cv::INTER_AREA);
+		OPTDENSE::nCoarseToFineStep++;
 	}
 
 	// init integral images and index to image-ref map for the reference data
@@ -2054,7 +2056,12 @@ void Scene::DenseReconstructionEstimate(void* pData)
 			data.sem.Wait();
 			if (data.nFusionMode >= 0) {
 				// extract depth-map using Patch-Match algorithm
-				data.depthMaps.EstimateDepthMap(data.images[evtImage.idxImage]);
+				if(OPTDENSE::bCoarseToFine){
+					data.depthMaps.EstimateDepthMapCoarseToFine(data.images[evtImage.idxImage]);
+				}
+				else{
+					data.depthMaps.EstimateDepthMap(data.images[evtImage.idxImage]);
+				}
 			} else {
 				// extract disparity-maps using SGM algorithm
 				if (data.nFusionMode == -1) {
