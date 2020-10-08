@@ -106,6 +106,9 @@ MDEFVAR_OPTDENSE_float(fRandomAngle2Range, "Random Angle2 Range", "Angle 2 range
 MDEFVAR_OPTDENSE_float(fRandomSmoothDepth, "Random Smooth Depth", "Depth variance used during neighbor smoothness assignment (ratio)", "0.02")
 MDEFVAR_OPTDENSE_float(fRandomSmoothNormal, "Random Smooth Normal", "Normal variance used during neighbor smoothness assignment (degrees)", "13")
 MDEFVAR_OPTDENSE_float(fRandomSmoothBonus, "Random Smooth Bonus", "Score factor used to encourage smoothness (1 - disabled)", "0.93")
+
+MDEFVAR_OPTDENSE_uint32(nCoarseToFineStep, "CoarseToFine Steps", "Number of steps for depth-map refinement", "0")
+MDEFVAR_OPTDENSE_bool(bCoarseToFine, "CoarseToFine bool", "whether use coarse to fine", "false")
 }
 
 
@@ -215,9 +218,12 @@ bool DepthData::Save(const String& fileName) const
 	ASSERT(IsValid() && !depthMap.empty() && !confMap.empty());
 	const String fileNameTmp(fileName+".tmp"); {
 		// serialize out the current state
+		//std::cout << "images.size() " << images.size() << ".\n";
 		IIndexArr IDs(0, images.size());
-		for (const ViewData& image: images)
+		for (const ViewData& image: images){
+			//std::cout << "image.GetID()\n " << image.GetID() << ".\n";
 			IDs.push_back(image.GetID());
+		}
 		const ViewData& image0 = GetView();
 		if (!ExportDepthDataRaw(fileNameTmp, image0.pImageData->name, IDs, depthMap.size(), image0.camera.K, image0.camera.R, image0.camera.C, dMin, dMax, depthMap, normalMap, confMap))
 			return false;
@@ -297,12 +303,12 @@ float resizeImage(Image8U& image, unsigned nMaxResolution)
 bool DepthEstimator::ImportIgnoreMask(const Image& image0, const Image8U::Size& size, BitMatrix& bmask, uint16_t nIgnoreMaskLabel)
 {
 	ASSERT(image0.IsValid() && !image0.image.empty());
-	std::cout << image0.name << ".\n";
+	//std::cout << image0.name << ".\n";
 	std::string ppath_image = Util::getFilePath(image0.name);
 	std::string stem_image = Util::getFileName(image0.name);
 
 	std::string path_png = ppath_image + "../masks/" + stem_image + ".png";
-	std::cout << "Mask path: " << path_png << "\n";
+	// std::cout << "Mask path: " << path_png << "\n";
 
 	
 	// load mask  
@@ -433,48 +439,6 @@ bool DepthEstimator::PreparePixelPatch(const ImageRef& x)
 	       image0.image.isInside(ImageRef(x.x+nSizeHalfWindow, x.y+nSizeHalfWindow));
 }
 // fetch the patch pixel values in the main image
-// bool DepthEstimator::FillPixelPatch()
-// {
-// 	#if DENSE_NCC != DENSE_NCC_WEIGHTED
-// 	const float mean(GetImage0Sum(x0)/nTexels);
-// 	normSq0 = 0;
-// 	float* pTexel0 = texels0.data();
-// 	for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep)
-// 		for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep)
-// 			normSq0 += SQUARE(*pTexel0++ = image0.image(x0.y+i, x0.x+j)-mean);
-// 	#else
-// 	Weight& w = weightMap0[x0.y*image0.image.width()+x0.x];
-// 	if (w.normSq0 == 0) {
-// 		w.sumWeights = 0;
-// 		int n = 0;
-// 		const float colCenter = image0.image(x0);
-// 		for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
-// 			for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
-// 				Weight::Pixel& pw = w.weights[n++];
-// 				w.normSq0 +=
-// 					(pw.tempWeight = image0.image(x0.y+i, x0.x+j)) *
-// 					(pw.weight = GetWeight(ImageRef(j,i), colCenter));
-// 				w.sumWeights += pw.weight;
-// 			}
-// 		}
-// 		ASSERT(n == nTexels);
-// 		const float tm(w.normSq0/w.sumWeights);
-// 		w.normSq0 = 0;
-// 		n = 0;
-// 		do {
-// 			Weight::Pixel& pw = w.weights[n];
-// 			const float t(pw.tempWeight - tm);
-// 			w.normSq0 += (pw.tempWeight = pw.weight * t) * t;
-// 		} while (++n < nTexels);
-// 	}
-// 	normSq0 = w.normSq0;
-// 	#endif
-// 	if (normSq0 < thMagnitudeSq)
-// 		return false;
-// 	reinterpret_cast<Point3&>(X0) = image0.camera.TransformPointI2C(Cast<REAL>(x0));
-// 	return true;
-// }
-
 bool DepthEstimator::FillPixelPatch()
 {
 	#if DENSE_NCC != DENSE_NCC_WEIGHTED
@@ -493,227 +457,192 @@ bool DepthEstimator::FillPixelPatch()
 		for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
 			for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
 				Weight::Pixel& pw = w.weights[n++];
-				pw.tempWeight = image0.image(x0.y+i, x0.x+j);
-				pw.weight = GetWeight(ImageRef(j,i), colCenter);
-				// w.normSq0 +=
-				// 	(pw.tempWeight = image0.image(x0.y+i, x0.x+j)) *
-				// 	(pw.weight = GetWeight(ImageRef(j,i), colCenter));
-				// w.sumWeights += pw.weight;
+				w.normSq0 +=
+					(pw.tempWeight = image0.image(x0.y+i, x0.x+j)) *
+					(pw.weight = GetWeight(ImageRef(j,i), colCenter));
+				w.sumWeights += pw.weight;
 			}
 		}
-		// ASSERT(n == nTexels);
-		// const float tm(w.normSq0/w.sumWeights);
-		// w.normSq0 = 0;
-		// n = 0;
-		// do {
-		// 	Weight::Pixel& pw = w.weights[n];
-		// 	const float t(pw.tempWeight - tm);
-		// 	w.normSq0 += (pw.tempWeight = pw.weight * t) * t;
-		// } while (++n < nTexels);
+		ASSERT(n == nTexels);
+		const float tm(w.normSq0/w.sumWeights);
+		w.normSq0 = 0;
+		n = 0;
+		do {
+			Weight::Pixel& pw = w.weights[n];
+			const float t(pw.tempWeight - tm);
+			w.normSq0 += (pw.tempWeight = pw.weight * t) * t;
+		} while (++n < nTexels);
 	}
-	// normSq0 = w.normSq0;
+	normSq0 = w.normSq0;
 	#endif
-	// if (normSq0 < thMagnitudeSq)
-	// 	return false;
+	if (normSq0 < thMagnitudeSq)
+		return false;
 	reinterpret_cast<Point3&>(X0) = image0.camera.TransformPointI2C(Cast<REAL>(x0));
 	return true;
 }
 
+// bool DepthEstimator::FillPixelPatch()
+// {
+// 	#if DENSE_NCC != DENSE_NCC_WEIGHTED
+// 	const float mean(GetImage0Sum(x0)/nTexels);
+// 	normSq0 = 0;
+// 	float* pTexel0 = texels0.data();
+// 	for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep)
+// 		for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep)
+// 			normSq0 += SQUARE(*pTexel0++ = image0.image(x0.y+i, x0.x+j)-mean);
+// 	#else
+// 	Weight& w = weightMap0[x0.y*image0.image.width()+x0.x];
+// 	if (w.normSq0 == 0) {
+// 		w.sumWeights = 0;
+// 		int n = 0;
+// 		const float colCenter = image0.image(x0);
+// 		for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
+// 			for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
+// 				Weight::Pixel& pw = w.weights[n++];
+// 				pw.tempWeight = image0.image(x0.y+i, x0.x+j);
+// 				pw.weight = GetWeight(ImageRef(j,i), colCenter);
+// 				// w.normSq0 +=
+// 				// 	(pw.tempWeight = image0.image(x0.y+i, x0.x+j)) *
+// 				// 	(pw.weight = GetWeight(ImageRef(j,i), colCenter));
+// 				// w.sumWeights += pw.weight;
+// 			}
+// 		}
+// 		// ASSERT(n == nTexels);
+// 		// const float tm(w.normSq0/w.sumWeights);
+// 		// w.normSq0 = 0;
+// 		// n = 0;
+// 		// do {
+// 		// 	Weight::Pixel& pw = w.weights[n];
+// 		// 	const float t(pw.tempWeight - tm);
+// 		// 	w.normSq0 += (pw.tempWeight = pw.weight * t) * t;
+// 		// } while (++n < nTexels);
+// 	}
+// 	// normSq0 = w.normSq0;
+// 	#endif
+// 	// if (normSq0 < thMagnitudeSq)
+// 	// 	return false;
+// 	reinterpret_cast<Point3&>(X0) = image0.camera.TransformPointI2C(Cast<REAL>(x0));
+// 	return true;
+// }
+
 // compute pixel's NCC score in the given target image
-float DepthEstimator::ScorePixelImage(const ViewData& image1, Depth depth, const Normal& normal)
-{
-	// center a patch of given size on the segment and fetch the pixel values in the target image
-	Matrix3x3f H(ComputeHomographyMatrix(image1, depth, normal));
-	Point3f X; 
-	// std::cout << "X is " << X << "\n";
-	ProjectVertex_3x3_2_3(H.val, Point2f(float(x0.x-nSizeHalfWindow),float(x0.y-nSizeHalfWindow)).ptr(), X.ptr());
-	Point3f baseX(X);
-	H *= float(nSizeStep);
-	int n_image1(0);
-	float sum(0);
-	#if DENSE_NCC != DENSE_NCC_DEFAULT
-	float sumSq(0), num(0);
-	#endif
-	#if DENSE_NCC == DENSE_NCC_WEIGHTED
-	const Weight& w_image1 = weightMap0[x0.y*image0.image.width()+x0.x];
-	#endif
-
-    // image1 patch
-	std::vector<int> patch_mask(nTexels, 0);
-	std::vector<float> patch_values_image1(nTexels, 0.0);
-	for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
-		for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
-			const Point2f pt(X);
-			if (!image1.view.image.isInsideWithBorder<float,1>(pt))
-				return thRobust;
-
-			const float v(image1.view.image.sample(pt));
-			const Weight::Pixel& pw = w_image1.weights[n_image1];
-			//std::cout << "v " << v << " pw.tpw " << pw.tempWeight << ".\n";
-
-			// Only  pixels both in image0 and image1 whose values are non-zero are processes
-			if(v != 0.0 && pw.tempWeight != 0.0){
-				patch_mask[n_image1] = 1;
-				patch_values_image1[n_image1] = v;
-				#if DENSE_NCC == DENSE_NCC_FAST
-				sum += v;
-				sumSq += SQUARE(v);
-				num += texels0(n)*v;
-				#elif DENSE_NCC == DENSE_NCC_WEIGHTED
-				
-				const float vw(v*pw.weight);
-				sum += vw;
-				sumSq += v*vw;
-				//num += v*pw.tempWeight;
-				#else
-				sum += texels1(n)=v;
-				#endif
-				n_image1++;
-			}
-			
-			X.x += H[0]; X.y += H[3]; X.z += H[6];
-		}
-		baseX.x += H[1]; baseX.y += H[4]; baseX.z += H[7];
-		X = baseX;
-	}
-	//std::cout << "path mask == 1: " << std::count(patch_mask.begin(), patch_mask.end(), 1) << "\n\n";
-
-	// image0: Updata patch in image 0: only both pixels are non-zero
-	Weight w_image0 = weightMap0[x0.y*image0.image.width()+x0.x];
-	//std::cout << "w_image0.normSq0 " << w_image0.normSq0 << '\n';
-	if (w_image0.normSq0 == 0) {
-		w_image0.sumWeights = 0;
-		int n_image0 = 0;
-		
-		const float colCenter = image0.image(x0);
-		for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
-			for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
-				Weight::Pixel& pw = w_image0.weights[n_image0];
-				if (patch_mask[n_image0] == 1){	
-					w_image0.normSq0 +=
-						pw.tempWeight *
-						pw.weight;
-						// (pw.tempWeight = image0.image(x0.y+i, x0.x+j)) *
-						// (pw.weight = GetWeight(ImageRef(j,i), colCenter));
-					w_image0.sumWeights += pw.weight;
-					n_image0++;
-				}
-				
-			}
-		}
-		ASSERT(n_image0 == nTexels);
-		const float tm(w_image0.normSq0/w_image0.sumWeights);
-		w_image0.normSq0 = 0;
-		n_image0 = 0;
-		int count = 0;
-		do {
-			// Only process pixels whose value on image0 and image1 are both lager than 0
-			if (patch_mask[n_image0] == 1){
-				// std::cout << patch_mask[n_image0] << " ";
-				Weight::Pixel& pw = w_image0.weights[n_image0];
-				const float t(pw.tempWeight - tm);
-				w_image0.normSq0 += (pw.tempWeight = pw.weight * t) * t;
-
-				num += patch_values_image1[n_image0]*pw.tempWeight;
-				count++;
-				//n_image0++;
-			}
-		} while ( ++n_image0< nTexels);
-		ASSERT(count == nTexels);
-		//std::cout << "cout" << count << "\n\n";
-		ASSERT(n_image0 == nTexels);
-	}
-	normSq0 = w_image0.normSq0;
-
-	if (normSq0 < thMagnitudeSq)
-		return false;
-
-
-	/* ************************************* */
-
-	ASSERT(n_image1 == nTexels);
-	// score similarity of the reference and target texture patches
-	#if DENSE_NCC == DENSE_NCC_FAST
-	const float normSq1(sumSq-SQUARE(sum/nSizeWindow));
-	#elif DENSE_NCC == DENSE_NCC_WEIGHTED
-	const float normSq1(sumSq-SQUARE(sum)/w_image0.sumWeights);
-	#else
-	const float normSq1(normSqDelta<float,float,nTexels>(texels1.data(), sum/(float)nTexels));
-	#endif
-	const float nrmSq(normSq0*normSq1);
-	if (nrmSq <= 0.f)
-		return thRobust;
-	#if DENSE_NCC == DENSE_NCC_DEFAULT
-	const float num(texels0.dot(texels1));
-	#endif
-	const float ncc(CLAMP(num/SQRT(nrmSq), -1.f, 1.f));
-	float score(1.f-ncc);
-	#if DENSE_SMOOTHNESS != DENSE_SMOOTHNESS_NA
-	// encourage smoothness
-	for (const NeighborEstimate& neighbor: neighborsClose) {
-		#if DENSE_SMOOTHNESS == DENSE_SMOOTHNESS_PLANE
-		const float factorDepth(DENSE_EXP(SQUARE(plane.Distance(neighbor.X)/depth) * smoothSigmaDepth));
-		#else
-		const float factorDepth(DENSE_EXP(SQUARE((depth-neighbor.depth)/depth) * smoothSigmaDepth));
-		#endif
-		const float factorNormal(DENSE_EXP(SQUARE(ACOS(ComputeAngle<float,float>(normal.ptr(), neighbor.normal.ptr()))) * smoothSigmaNormal));
-		score *= (1.f - smoothBonusDepth * factorDepth) * (1.f - smoothBonusNormal * factorNormal);
-	}
-	#endif
-	ASSERT(ISFINITE(score));
-	return score;
-}
-
 // float DepthEstimator::ScorePixelImage(const ViewData& image1, Depth depth, const Normal& normal)
 // {
 // 	// center a patch of given size on the segment and fetch the pixel values in the target image
 // 	Matrix3x3f H(ComputeHomographyMatrix(image1, depth, normal));
-// 	Point3f X;
-// 	std::cout << "X is " << X << "\n";
+// 	Point3f X; 
+// 	// std::cout << "X is " << X << "\n";
 // 	ProjectVertex_3x3_2_3(H.val, Point2f(float(x0.x-nSizeHalfWindow),float(x0.y-nSizeHalfWindow)).ptr(), X.ptr());
 // 	Point3f baseX(X);
 // 	H *= float(nSizeStep);
-// 	int n(0);
+// 	int n_image1(0);
 // 	float sum(0);
 // 	#if DENSE_NCC != DENSE_NCC_DEFAULT
 // 	float sumSq(0), num(0);
 // 	#endif
 // 	#if DENSE_NCC == DENSE_NCC_WEIGHTED
-// 	const Weight& w = weightMap0[x0.y*image0.image.width()+x0.x];
+// 	const Weight& w_image1 = weightMap0[x0.y*image0.image.width()+x0.x];
 // 	#endif
+
+//     // image1 patch
+// 	std::vector<int> patch_mask(nTexels, 0);
+// 	std::vector<float> patch_values_image1(nTexels, 0.0);
 // 	for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
 // 		for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
 // 			const Point2f pt(X);
 // 			if (!image1.view.image.isInsideWithBorder<float,1>(pt))
 // 				return thRobust;
-// 			std::cout << "X is " << X << "\n";
-// 			std::cout << "pt is " << pt << "\n\n";
+
 // 			const float v(image1.view.image.sample(pt));
-// 			std::cout << "Intensity " << v << "\n";
-// 			#if DENSE_NCC == DENSE_NCC_FAST
-// 			sum += v;
-// 			sumSq += SQUARE(v);
-// 			num += texels0(n++)*v;
-// 			#elif DENSE_NCC == DENSE_NCC_WEIGHTED
-// 			const Weight::Pixel& pw = w.weights[n++];
-// 			const float vw(v*pw.weight);
-// 			sum += vw;
-// 			sumSq += v*vw;
-// 			num += v*pw.tempWeight;
-// 			#else
-// 			sum += texels1(n++)=v;
-// 			#endif
+// 			const Weight::Pixel& pw = w_image1.weights[n_image1];
+// 			//std::cout << "v " << v << " pw.tpw " << pw.tempWeight << ".\n";
+
+// 			// Only  pixels both in image0 and image1 whose values are non-zero are processes
+// 			if(v != 0.0 && pw.tempWeight != 0.0){
+// 				patch_mask[n_image1] = 1;
+// 				patch_values_image1[n_image1] = v;
+// 				#if DENSE_NCC == DENSE_NCC_FAST
+// 				sum += v;
+// 				sumSq += SQUARE(v);
+// 				num += texels0(n)*v;
+// 				#elif DENSE_NCC == DENSE_NCC_WEIGHTED
+				
+// 				const float vw(v*pw.weight);
+// 				sum += vw;
+// 				sumSq += v*vw;
+// 				//num += v*pw.tempWeight;
+// 				#else
+// 				sum += texels1(n)=v;
+// 				#endif
+// 				n_image1++;
+// 			}
+			
 // 			X.x += H[0]; X.y += H[3]; X.z += H[6];
 // 		}
 // 		baseX.x += H[1]; baseX.y += H[4]; baseX.z += H[7];
 // 		X = baseX;
 // 	}
-// 	ASSERT(n == nTexels);
+// 	//std::cout << "path mask == 1: " << std::count(patch_mask.begin(), patch_mask.end(), 1) << "\n\n";
+
+// 	// image0: Updata patch in image 0: only both pixels are non-zero
+// 	Weight w_image0 = weightMap0[x0.y*image0.image.width()+x0.x];
+// 	//std::cout << "w_image0.normSq0 " << w_image0.normSq0 << '\n';
+// 	if (w_image0.normSq0 == 0) {
+// 		w_image0.sumWeights = 0;
+// 		int n_image0 = 0;
+		
+// 		const float colCenter = image0.image(x0);
+// 		for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
+// 			for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
+// 				Weight::Pixel& pw = w_image0.weights[n_image0];
+// 				if (patch_mask[n_image0] == 1){	
+// 					w_image0.normSq0 +=
+// 						pw.tempWeight *
+// 						pw.weight;
+// 						// (pw.tempWeight = image0.image(x0.y+i, x0.x+j)) *
+// 						// (pw.weight = GetWeight(ImageRef(j,i), colCenter));
+// 					w_image0.sumWeights += pw.weight;
+// 					n_image0++;
+// 				}
+				
+// 			}
+// 		}
+// 		ASSERT(n_image0 == nTexels);
+// 		const float tm(w_image0.normSq0/w_image0.sumWeights);
+// 		w_image0.normSq0 = 0;
+// 		n_image0 = 0;
+// 		int count = 0;
+// 		do {
+// 			// Only process pixels whose value on image0 and image1 are both lager than 0
+// 			if (patch_mask[n_image0] == 1){
+// 				// std::cout << patch_mask[n_image0] << " ";
+// 				Weight::Pixel& pw = w_image0.weights[n_image0];
+// 				const float t(pw.tempWeight - tm);
+// 				w_image0.normSq0 += (pw.tempWeight = pw.weight * t) * t;
+
+// 				num += patch_values_image1[n_image0]*pw.tempWeight;
+// 				count++;
+// 				//n_image0++;
+// 			}
+// 		} while ( ++n_image0< nTexels);
+// 		ASSERT(count == nTexels+1);
+// 		//std::cout << "cout" << count << "\n\n";
+// 		ASSERT(n_image0 == nTexels);
+// 	}
+// 	normSq0 = w_image0.normSq0;
+
+// 	if (normSq0 < thMagnitudeSq)
+// 		return false;
+
+
+// 	/* ************************************* */
+
+// 	ASSERT(n_image1 == nTexels);
 // 	// score similarity of the reference and target texture patches
 // 	#if DENSE_NCC == DENSE_NCC_FAST
 // 	const float normSq1(sumSq-SQUARE(sum/nSizeWindow));
 // 	#elif DENSE_NCC == DENSE_NCC_WEIGHTED
-// 	const float normSq1(sumSq-SQUARE(sum)/w.sumWeights);
+// 	const float normSq1(sumSq-SQUARE(sum)/w_image0.sumWeights);
 // 	#else
 // 	const float normSq1(normSqDelta<float,float,nTexels>(texels1.data(), sum/(float)nTexels));
 // 	#endif
@@ -740,6 +669,83 @@ float DepthEstimator::ScorePixelImage(const ViewData& image1, Depth depth, const
 // 	ASSERT(ISFINITE(score));
 // 	return score;
 // }
+
+float DepthEstimator::ScorePixelImage(const ViewData& image1, Depth depth, const Normal& normal)
+{
+	// center a patch of given size on the segment and fetch the pixel values in the target image
+	Matrix3x3f H(ComputeHomographyMatrix(image1, depth, normal));
+	Point3f X;
+	// std::cout << "X is " << X << "\n";
+	ProjectVertex_3x3_2_3(H.val, Point2f(float(x0.x-nSizeHalfWindow),float(x0.y-nSizeHalfWindow)).ptr(), X.ptr());
+	Point3f baseX(X);
+	H *= float(nSizeStep);
+	int n(0);
+	float sum(0);
+	#if DENSE_NCC != DENSE_NCC_DEFAULT
+	float sumSq(0), num(0);
+	#endif
+	#if DENSE_NCC == DENSE_NCC_WEIGHTED
+	const Weight& w = weightMap0[x0.y*image0.image.width()+x0.x];
+	#endif
+	for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; i+=nSizeStep) {
+		for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; j+=nSizeStep) {
+			const Point2f pt(X);
+			if (!image1.view.image.isInsideWithBorder<float,1>(pt))
+				return thRobust;
+			// std::cout << "X is " << X << "\n";
+			// std::cout << "pt is " << pt << "\n\n";
+			const float v(image1.view.image.sample(pt));
+			// std::cout << "Intensity " << v << "\n";
+			#if DENSE_NCC == DENSE_NCC_FAST
+			sum += v;
+			sumSq += SQUARE(v);
+			num += texels0(n++)*v;
+			#elif DENSE_NCC == DENSE_NCC_WEIGHTED
+			const Weight::Pixel& pw = w.weights[n++];
+			const float vw(v*pw.weight);
+			sum += vw;
+			sumSq += v*vw;
+			num += v*pw.tempWeight;
+			#else
+			sum += texels1(n++)=v;
+			#endif
+			X.x += H[0]; X.y += H[3]; X.z += H[6];
+		}
+		baseX.x += H[1]; baseX.y += H[4]; baseX.z += H[7];
+		X = baseX;
+	}
+	ASSERT(n == nTexels);
+	// score similarity of the reference and target texture patches
+	#if DENSE_NCC == DENSE_NCC_FAST
+	const float normSq1(sumSq-SQUARE(sum/nSizeWindow));
+	#elif DENSE_NCC == DENSE_NCC_WEIGHTED
+	const float normSq1(sumSq-SQUARE(sum)/w.sumWeights);
+	#else
+	const float normSq1(normSqDelta<float,float,nTexels>(texels1.data(), sum/(float)nTexels));
+	#endif
+	const float nrmSq(normSq0*normSq1);
+	if (nrmSq <= 0.f)
+		return thRobust;
+	#if DENSE_NCC == DENSE_NCC_DEFAULT
+	const float num(texels0.dot(texels1));
+	#endif
+	const float ncc(CLAMP(num/SQRT(nrmSq), -1.f, 1.f));
+	float score(1.f-ncc);
+	#if DENSE_SMOOTHNESS != DENSE_SMOOTHNESS_NA
+	// encourage smoothness
+	for (const NeighborEstimate& neighbor: neighborsClose) {
+		#if DENSE_SMOOTHNESS == DENSE_SMOOTHNESS_PLANE
+		const float factorDepth(DENSE_EXP(SQUARE(plane.Distance(neighbor.X)/depth) * smoothSigmaDepth));
+		#else
+		const float factorDepth(DENSE_EXP(SQUARE((depth-neighbor.depth)/depth) * smoothSigmaDepth));
+		#endif
+		const float factorNormal(DENSE_EXP(SQUARE(ACOS(ComputeAngle<float,float>(normal.ptr(), neighbor.normal.ptr()))) * smoothSigmaNormal));
+		score *= (1.f - smoothBonusDepth * factorDepth) * (1.f - smoothBonusNormal * factorNormal);
+	}
+	#endif
+	ASSERT(ISFINITE(score));
+	return score;
+}
 
 // compute pixel's NCC score
 float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)

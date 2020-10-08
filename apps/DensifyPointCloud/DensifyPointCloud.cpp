@@ -102,7 +102,7 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 		("output-file,o", boost::program_options::value<std::string>(&OPT::strOutputFileName), "output filename for storing the dense point-cloud")
 		("resolution-level", boost::program_options::value(&nResolutionLevel)->default_value(1), "how many times to scale down the images before point cloud computation")
 		("max-resolution", boost::program_options::value(&nMaxResolution)->default_value(3200), "do not scale images higher than this resolution")
-		("min-resolution", boost::program_options::value(&nMinResolution)->default_value(640), "do not scale images lower than this resolution")
+		("min-resolution", boost::program_options::value(&nMinResolution)->default_value(100), "do not scale images lower than this resolution")
 		("number-views", boost::program_options::value(&nNumViews)->default_value(5), "number of views used for depth-map estimation (0 - all neighbor views available)")
 		("number-views-fuse", boost::program_options::value(&nMinViewsFuse)->default_value(3), "minimum number of images that agrees with an estimate during fusion in order to consider it inlier")
 		("estimate-colors", boost::program_options::value(&nEstimateColors)->default_value(2), "estimate the colors for the dense point-cloud (0 - disabled, 1 - final, 2 - estimate)")
@@ -112,7 +112,7 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 		("fusion-mode", boost::program_options::value(&OPT::nFusionMode)->default_value(0), "depth map fusion mode (-2 - fuse disparity-maps, -1 - export disparity-maps only, 0 - depth-maps & fusion, 1 - export depth-maps only)")
 		
 		("coarse-to-fine", boost::program_options::value(&bCoarseToFine)->default_value(false), "whether to adopt [coarse to fine] method or not")
-		("coarse-to-fine-step", boost::program_options::value(&nCoarseToFineStep)->default_value(1), "how many times to upsample image to perform MVS")
+		("coarse-to-fine-step", boost::program_options::value(&nCoarseToFineStep)->default_value(0), "how many times to upsample image to perform MVS")
 		;
 
 	// hidden options, allowed both on command line and

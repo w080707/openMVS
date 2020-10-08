@@ -86,6 +86,10 @@ public:
 
 	bool ComputeDepthMaps(DenseDepthMapData& data);
 	bool ComputeDepthMapsCoarseToFine(DenseDepthMapData& data);
+	bool ComputeDepthMapsCoarseToFine(DenseDepthMapData& data, const int& nStep);
+
+	// Coarse to fine
+	bool UpdateImagesCamerasC2F(DenseDepthMapData& data);
 
 	void DenseReconstructionEstimate(void*);
 	void DenseReconstructionFilter(void*);
